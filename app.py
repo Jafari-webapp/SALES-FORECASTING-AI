@@ -1,4 +1,6 @@
+ 
 
+ 📊 MACHINE LEARNING DASHBOARD 
 # ==============================
 # IMPORTS
 # ==============================
@@ -17,7 +19,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 st.set_page_config(page_title="ML Dashboard", layout="wide")
 
 # ==============================
-# CUSTOM CSS (RANGI NZURI)
+# CUSTOM CSS
 # ==============================
 st.markdown("""
 <style>
@@ -34,47 +36,61 @@ h1, h2, h3 {
     height: 3em;
     width: 100%;
 }
-.css-1d391kg {
-    background-color: #111827;
-}
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================
-# DATABASE (LOGIN SYSTEM)
+# DATABASE
 # ==============================
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS users(username TEXT, password TEXT)''')
 
-# add default user
-c.execute("SELECT * FROM users")
-if not c.fetchall():
+c.execute('''
+CREATE TABLE IF NOT EXISTS users(
+    username TEXT,
+    password TEXT
+)
+''')
+
+# default user (fix duplicate insert)
+c.execute("SELECT COUNT(*) FROM users")
+if c.fetchone()[0] == 0:
     c.execute("INSERT INTO users VALUES('admin','admin')")
     conn.commit()
+
+# ==============================
+# SESSION INIT
+# ==============================
+if "login" not in st.session_state:
+    st.session_state["login"] = False
 
 # ==============================
 # LOGIN FUNCTION
 # ==============================
 def login():
     st.sidebar.title("🔐 Login Panel")
+
     username = st.sidebar.text_input("Username")
     password = st.sidebar.text_input("Password", type="password")
 
     if st.sidebar.button("Login"):
-        c.execute("SELECT * FROM users WHERE username=? AND password=?",
-                  (username, password))
+        c.execute(
+            "SELECT * FROM users WHERE username=? AND password=?",
+            (username, password)
+        )
         result = c.fetchone()
+
         if result:
             st.session_state["login"] = True
             st.success("Login Successful!")
+            st.rerun()
         else:
             st.error("Invalid Credentials")
 
 # ==============================
 # LOGIN CHECK
 # ==============================
-if "login" not in st.session_state:
+if not st.session_state["login"]:
     login()
     st.stop()
 
@@ -89,6 +105,7 @@ st.title("📊 ML Descriptive & Predictive Analysis Dashboard")
 file = st.file_uploader("📂 Upload CSV File", type=["csv"])
 
 if file:
+
     df = pd.read_csv(file)
 
     st.subheader("📌 Dataset Preview")
@@ -113,7 +130,7 @@ if file:
     st.dataframe(df.describe())
 
     # ==============================
-    # COLUMN SELECTION
+    # VISUALIZATION
     # ==============================
     numeric_cols = df.select_dtypes(include=np.number).columns
 
@@ -121,21 +138,23 @@ if file:
 
         selected_col = st.selectbox("Select Column for Visualization", numeric_cols)
 
-        # BAR CHART
         st.subheader("📊 Bar Chart")
-        fig1 = px.bar(df, y=selected_col, title="Bar Chart")
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(px.bar(df, y=selected_col), use_container_width=True)
 
-        # LINE CHART
         st.subheader("📈 Line Chart")
-        fig2 = px.line(df, y=selected_col, title="Line Chart")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(px.line(df, y=selected_col), use_container_width=True)
 
-        # PIE CHART (sample grouping)
         st.subheader("🥧 Pie Chart")
-        pie_data = df[selected_col].value_counts().head(10)
-        fig3 = px.pie(values=pie_data.values, names=pie_data.index)
-        st.plotly_chart(fig3, use_container_width=True)
+
+        if df[selected_col].nunique() > 10:
+            pie_data = df[selected_col].round().value_counts().head(10)
+        else:
+            pie_data = df[selected_col].value_counts()
+
+        st.plotly_chart(
+            px.pie(values=pie_data.values, names=pie_data.index),
+            use_container_width=True
+        )
 
     # ==============================
     # PREDICTIVE ANALYSIS
@@ -143,6 +162,7 @@ if file:
     st.subheader("🤖 Predictive Analysis (Linear Regression)")
 
     if len(numeric_cols) >= 2:
+
         target = st.selectbox("Select Target Column", numeric_cols)
 
         features = st.multiselect(
@@ -152,10 +172,15 @@ if file:
 
         if len(features) > 0:
 
-            X = df[features].fillna(0)
-            y = df[target].fillna(0)
+            # CLEAN DATA (IMPORTANT FIX)
+            df_model = df[features + [target]].dropna()
 
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+            X = df_model[features]
+            y = df_model[target]
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
 
             model = LinearRegression()
             model.fit(X_train, y_train)
@@ -167,23 +192,34 @@ if file:
             st.write("MSE:", mean_squared_error(y_test, predictions))
 
             # ==============================
+            # ACTUAL VS PREDICTED
+            # ==============================
+            st.subheader("📊 Actual vs Predicted")
+
+            fig = px.scatter(
+                x=y_test,
+                y=predictions,
+                labels={"x": "Actual", "y": "Predicted"}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # ==============================
             # USER INPUT PREDICTION
             # ==============================
             st.subheader("🔮 Make Prediction")
 
             input_data = []
+
             for f in features:
                 val = st.number_input(f"Enter {f}", value=0.0)
                 input_data.append(val)
 
             if st.button("Predict"):
-                result = model.predict([input_data])
+
+                input_array = np.array(input_data).reshape(1, -1)
+                result = model.predict(input_array)
+
                 st.success(f"Predicted Value: {result[0]}")
 
 else:
     st.info("Upload CSV file to start analysis")
-
-
-
-
-
