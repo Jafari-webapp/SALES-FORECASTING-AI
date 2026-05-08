@@ -1,6 +1,6 @@
 
-Import streamlit as st
-Import pandas as pd
+import streamlit as st
+import pandas as pd
 # Boxplot
     st.subheader("📦 Boxplot")
     fig2, ax2 = plt.subplots()
