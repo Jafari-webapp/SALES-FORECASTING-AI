@@ -1,6 +1,3 @@
- 
-
-st.title("MACHINE LEARNING DASHBOARD")
 # ==============================
 # IMPORTS
 # ==============================
@@ -16,6 +13,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 # ==============================
 # PAGE CONFIG
 # ==============================
+st.title("MACHINE LEARNING DASHBOARD")
 st.set_page_config(page_title="ML Dashboard", layout="wide")
 
 # ==============================
