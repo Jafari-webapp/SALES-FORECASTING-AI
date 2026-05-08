@@ -1,132 +1,74 @@
-
 import streamlit as st
 import pandas as pd
-# Boxplot
-    st.subheader("📦 Boxplot")
-    fig2, ax2 = plt.subplots()
-    sns.boxplot(x=df[column], ax=ax2)
-    st.pyplot(fig2)
+import numpy as np
+import matplotlib.pyplot as plt
+import joblib
 
-    # Correlation heatmap
-    st.subheader("🔥 Correlation Heatmap")
-    fig3, ax3 = plt.subplots()
-    sns.heatmap(df.corr(), annot=True, cmap="coolwarm", ax=ax3)
-    st.pyplot(fig3)
+st.set_page_config(page_title="ML Dashboard", layout="wide")
 
-else:
-    st.info("Upload a CSV file to start analysis")
+st.title("Descriptive & Predictive Analysis Dashboard")
+
+# Load trained model
+model = joblib.load("business_model.pkl")
+
+# Upload CSV
+uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
+
+if uploaded_file is not None:
+
+    # Read dataset
     df = pd.read_csv(uploaded_file)
 
-    # =========================
-    # DESCRIPTIVE ANALYSIS
-    # =========================
-    st.header("📌 Descriptive Analysis")
+    # Show dataset
+    st.subheader("Dataset Preview")
+    st.dataframe(df)
 
-    col1, col2 = st.columns(2)
+    # Descriptive Analysis
+    st.subheader("Descriptive Analysis")
 
-    with col1:
-        st.subheader("Dataset Preview")
-        st.dataframe(df.head())
+    st.write("Dataset Shape")
+    st.write(df.shape)
 
-    with col2:
-        st.subheader("Statistics Summary")
-        st.write(df.describe())
+    st.write("Summary Statistics")
+    st.write(df.describe())
 
-    st.subheader("Missing Values")
+    # Missing values
+    st.write("Missing Values")
     st.write(df.isnull().sum())
-    df = pd.read_csv(uploaded_file)
 
-    # =========================
-    # DESCRIPTIVE ANALYSIS
-    # =========================
-    st.header("📌 Descriptive Analysis")
+    # Select numeric column
+    numeric_columns = df.select_dtypes(include=np.number).columns.tolist()
 
-    col1, col2 = st.columns(2)
+    if len(numeric_columns) > 0:
 
-    with col1:
-        st.subheader("Dataset Preview")
-        st.dataframe(df.head())
-
-    with col2:
-        st.subheader("Statistics Summary")
-        st.write(df.describe())
-
-    st.subheader("Missing Values")
-    st.write(df.isnull().sum())
-   # Correlation heatmap
-    st.subheader("🔥 Correlation Heatmap")
-    fig, ax = plt.subplots()
-    sns.heatmap(df.corr(), annot=True, cmap="coolwarm", ax=ax)
-    st.pyplot(fig)
-
-    # =========================
-    # VISUAL ANALYSIS
-    # =========================
-    st.header("📊 Data Visualization")
-
-    column = st.selectbox("Select Column for Distribution", df.columns)
-
-    fig2, ax2 = plt.subplots()
-    sns.histplot(df[column], kde=True, ax=ax2)
-    st.pyplot(fig2)
-
-    # =========================
-    # PREDICTIVE ANALYSIS
-    # =========================
-    st.header("🤖 Predictive Analysis (ML Model)")
-
-  # Select features
-    target = st.selectbox("Select Target Column (y)", df.columns)
-
-    features = st.multiselect("Select Feature Columns (X)", df.columns)
-
-    if len(features) > 0:
-
-        X = df[features]
-        y = df[target]
-
-        # Train-test split
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
+        selected_column = st.selectbox(
+            "Select Column for Visualization",
+            numeric_columns
         )
 
-        # Model
-        model = LinearRegression()
-        model.fit(X_train, y_train)
+        # Histogram
+        fig, ax = plt.subplots()
+        ax.hist(df[selected_column], bins=20)
 
-        # Predictions
-        y_pred = model.predict(X_test)
-    # Metrics
-        r2 = r2_score(y_test, y_pred)
-        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        ax.set_title(f"Distribution of {selected_column}")
+        ax.set_xlabel(selected_column)
+        ax.set_ylabel("Frequency")
 
-        st.subheader("📈 Model Performance")
-        st.write("R² Score:", r2)
-        st.write("RMSE:", rmse)
+        st.pyplot(fig)
 
-        # Prediction vs Actual plot
-        fig3, ax3 = plt.subplots()
-        ax3.scatter(y_test, y_pred)
-        ax3.set_xlabel("Actual")
-        ax3.set_ylabel("Predicted")
-        ax3.set_title("Actual vs Predicted")
-        st.pyplot(fig3)
+    # Predictive Analysis
+    st.subheader("Predictive Analysis")
 
-        # =========================
-        # SINGLE PREDICTION UI
-        # =========================
-        st.subheader("🔮 Make Prediction")
+    st.write("Enter values for prediction")
 
-        input_data = []
+    input_data = []
 
+    for column in numeric_columns[:-1]:
+        value = st.number_input(f"Enter {column}")
+        input_data.append(value)
 
-        for col in features:
-            val = st.number_input(f"Enter {col}", value=0.0)
-            input_data.append(val)
+    if st.button("Predict"):
 
-        if st.button("Predict"):
-            prediction = model.predict([input_data])
-            st.success(f"Predicted {target}: {prediction[0]}")
+        prediction = model.predict([input_data])
 
-else:
-    st.info("Upload CSV file to start analysis")
+        st.success(f"Prediction Result: {prediction[0]}")
