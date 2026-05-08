@@ -1,74 +1,189 @@
+
+# ==============================
+# IMPORTS
+# ==============================
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import joblib
+import sqlite3
+import plotly.express as px
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
 
+# ==============================
+# PAGE CONFIG
+# ==============================
 st.set_page_config(page_title="ML Dashboard", layout="wide")
 
-st.title("Descriptive & Predictive Analysis Dashboard")
+# ==============================
+# CUSTOM CSS (RANGI NZURI)
+# ==============================
+st.markdown("""
+<style>
+body {
+    background-color: #0e1117;
+}
+h1, h2, h3 {
+    color: #00ffd5;
+}
+.stButton>button {
+    background-color: #00ffd5;
+    color: black;
+    border-radius: 10px;
+    height: 3em;
+    width: 100%;
+}
+.css-1d391kg {
+    background-color: #111827;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# Load trained model
-model = joblib.load("business_model.pkl")
+# ==============================
+# DATABASE (LOGIN SYSTEM)
+# ==============================
+conn = sqlite3.connect("users.db", check_same_thread=False)
+c = conn.cursor()
+c.execute('''CREATE TABLE IF NOT EXISTS users(username TEXT, password TEXT)''')
 
-# Upload CSV
-uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
+# add default user
+c.execute("SELECT * FROM users")
+if not c.fetchall():
+    c.execute("INSERT INTO users VALUES('admin','admin')")
+    conn.commit()
 
-if uploaded_file is not None:
+# ==============================
+# LOGIN FUNCTION
+# ==============================
+def login():
+    st.sidebar.title("🔐 Login Panel")
+    username = st.sidebar.text_input("Username")
+    password = st.sidebar.text_input("Password", type="password")
 
-    # Read dataset
-    df = pd.read_csv(uploaded_file)
+    if st.sidebar.button("Login"):
+        c.execute("SELECT * FROM users WHERE username=? AND password=?",
+                  (username, password))
+        result = c.fetchone()
+        if result:
+            st.session_state["login"] = True
+            st.success("Login Successful!")
+        else:
+            st.error("Invalid Credentials")
 
-    # Show dataset
-    st.subheader("Dataset Preview")
-    st.dataframe(df)
+# ==============================
+# LOGIN CHECK
+# ==============================
+if "login" not in st.session_state:
+    login()
+    st.stop()
 
-    # Descriptive Analysis
-    st.subheader("Descriptive Analysis")
+# ==============================
+# TITLE
+# ==============================
+st.title("📊 ML Descriptive & Predictive Analysis Dashboard")
 
-    st.write("Dataset Shape")
-    st.write(df.shape)
+# ==============================
+# FILE UPLOAD
+# ==============================
+file = st.file_uploader("📂 Upload CSV File", type=["csv"])
 
-    st.write("Summary Statistics")
-    st.write(df.describe())
+if file:
+    df = pd.read_csv(file)
 
-    # Missing values
-    st.write("Missing Values")
-    st.write(df.isnull().sum())
+    st.subheader("📌 Dataset Preview")
+    st.dataframe(df.head())
 
-    # Select numeric column
-    numeric_columns = df.select_dtypes(include=np.number).columns.tolist()
+    # ==============================
+    # KPI METRICS
+    # ==============================
+    st.subheader("📈 KPI Metrics")
 
-    if len(numeric_columns) > 0:
+    col1, col2, col3, col4 = st.columns(4)
 
-        selected_column = st.selectbox(
-            "Select Column for Visualization",
-            numeric_columns
+    col1.metric("Rows", df.shape[0])
+    col2.metric("Columns", df.shape[1])
+    col3.metric("Missing Values", df.isnull().sum().sum())
+    col4.metric("Duplicate Rows", df.duplicated().sum())
+
+    # ==============================
+    # DESCRIPTIVE ANALYSIS
+    # ==============================
+    st.subheader("📊 Descriptive Analysis")
+    st.dataframe(df.describe())
+
+    # ==============================
+    # COLUMN SELECTION
+    # ==============================
+    numeric_cols = df.select_dtypes(include=np.number).columns
+
+    if len(numeric_cols) > 0:
+
+        selected_col = st.selectbox("Select Column for Visualization", numeric_cols)
+
+        # BAR CHART
+        st.subheader("📊 Bar Chart")
+        fig1 = px.bar(df, y=selected_col, title="Bar Chart")
+        st.plotly_chart(fig1, use_container_width=True)
+
+        # LINE CHART
+        st.subheader("📈 Line Chart")
+        fig2 = px.line(df, y=selected_col, title="Line Chart")
+        st.plotly_chart(fig2, use_container_width=True)
+
+        # PIE CHART (sample grouping)
+        st.subheader("🥧 Pie Chart")
+        pie_data = df[selected_col].value_counts().head(10)
+        fig3 = px.pie(values=pie_data.values, names=pie_data.index)
+        st.plotly_chart(fig3, use_container_width=True)
+
+    # ==============================
+    # PREDICTIVE ANALYSIS
+    # ==============================
+    st.subheader("🤖 Predictive Analysis (Linear Regression)")
+
+    if len(numeric_cols) >= 2:
+        target = st.selectbox("Select Target Column", numeric_cols)
+
+        features = st.multiselect(
+            "Select Feature Columns",
+            [col for col in numeric_cols if col != target]
         )
 
-        # Histogram
-        fig, ax = plt.subplots()
-        ax.hist(df[selected_column], bins=20)
+        if len(features) > 0:
 
-        ax.set_title(f"Distribution of {selected_column}")
-        ax.set_xlabel(selected_column)
-        ax.set_ylabel("Frequency")
+            X = df[features].fillna(0)
+            y = df[target].fillna(0)
 
-        st.pyplot(fig)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
-    # Predictive Analysis
-st.subheader("Predictive Analysis")
+            model = LinearRegression()
+            model.fit(X_train, y_train)
 
-st.write("Enter values for prediction")
+            predictions = model.predict(X_test)
 
-quantity = st.number_input("Enter Quantity")
-unit_price = st.number_input("Enter Unit Price")
-discount = st.number_input("Enter Discount Percent")
+            st.write("📉 Model Performance")
+            st.write("R2 Score:", r2_score(y_test, predictions))
+            st.write("MSE:", mean_squared_error(y_test, predictions))
 
-input_data = [[quantity, unit_price, discount]]
+            # ==============================
+            # USER INPUT PREDICTION
+            # ==============================
+            st.subheader("🔮 Make Prediction")
 
-if st.button("Predict"):
+            input_data = []
+            for f in features:
+                val = st.number_input(f"Enter {f}", value=0.0)
+                input_data.append(val)
 
-    prediction = model.predict(input_data)
+            if st.button("Predict"):
+                result = model.predict([input_data])
+                st.success(f"Predicted Value: {result[0]}")
 
-    st.success(f"Predicted Sales: {prediction[0]}")
+else:
+    st.info("Upload CSV file to start analysis")
+
+
+
+
+
