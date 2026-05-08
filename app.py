@@ -1,6 +1,6 @@
  
 
-          MACHINE LEARNING DASHBOARD 
+st.title("MACHINE LEARNING DASHBOARD")
 # ==============================
 # IMPORTS
 # ==============================
