@@ -57,18 +57,18 @@ if uploaded_file is not None:
         st.pyplot(fig)
 
     # Predictive Analysis
-    st.subheader("Predictive Analysis")
+st.subheader("Predictive Analysis")
 
-    st.write("Enter values for prediction")
+st.write("Enter values for prediction")
 
-    input_data = []
+quantity = st.number_input("Enter Quantity")
+unit_price = st.number_input("Enter Unit Price")
+discount = st.number_input("Enter Discount Percent")
 
-    for column in numeric_columns[:-1]:
-        value = st.number_input(f"Enter {column}")
-        input_data.append(value)
+input_data = [[quantity, unit_price, discount]]
 
-    if st.button("Predict"):
+if st.button("Predict"):
 
-        prediction = model.predict([input_data])
+    prediction = model.predict(input_data)
 
-        st.success(f"Prediction Result: {prediction[0]}")
+    st.success(f"Predicted Sales: {prediction[0]}")
