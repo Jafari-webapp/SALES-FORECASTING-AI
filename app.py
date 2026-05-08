@@ -1,6 +1,6 @@
  
 
- 📊 MACHINE LEARNING DASHBOARD 
+          MACHINE LEARNING DASHBOARD 
 # ==============================
 # IMPORTS
 # ==============================
@@ -223,3 +223,4 @@ if file:
 
 else:
     st.info("Upload CSV file to start analysis")
+
