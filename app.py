@@ -38,7 +38,7 @@ X = df[[
     "Profit"
 ]]
 
-y = df["Total_Sales"]
+Y = df["Total_Sales"]
 
 # =========================
 # TRAIN MODEL
