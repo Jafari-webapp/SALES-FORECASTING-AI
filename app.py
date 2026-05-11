@@ -43,11 +43,14 @@ preds = model.predict(X_test)
 st.write("📉 Model Performance")
 st.write("R² Score:", round(r2_score(y_test, preds), 4))
 st.write("MSE:", round(mean_squared_error(y_test, preds), 4))
-   st.plotly_chart(
-                px.scatter(x=y_test, y=preds,
-                           labels={"x": "Actual Sales", "y": "Predicted Sales"}),
-                use_container_width=True
-            )
+st.plotly_chart(
+   px.scatter(
+       x=y_test, y=preds,
+labels={"x": "Actual Sales", "y": "Predicted Sales"}
+    
+   ),
+use_container_width=True
+    )
 
 # =========================
 # SIDEBAR INPUTS
