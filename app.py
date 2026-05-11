@@ -31,13 +31,7 @@ else:
 # =========================
 # FEATURES & TARGET
 # =========================
-X = df[[
-    "Quantity",
-    "Unit_Price",
-    "Discount_Percent",
-    "Profit"
-]]
-
+X = df[["Quantity","Unit_Price","Discount_Percent","Profit"]]
 Y = df["Total_Sales"]
 
 # =========================
