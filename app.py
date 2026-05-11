@@ -37,8 +37,8 @@ y = df["Total_Sales"]
 # =========================
 # TRAIN MODEL
 # =========================
- model = DecisionTreeRegressor()
- model.fit(X_train, Y_train)
+model = DecisionTreeRegressor()
+model.fit(X_train, Y_train)
 st.write("📉 Model Performance")
             st.write("R² Score:", round(r2_score(y_test, preds), 4))
             st.write("MSE:", round(mean_squared_error(y_test, preds), 4))
