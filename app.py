@@ -20,7 +20,7 @@ st.markdown("Machine Learning Sales Prediction System")
 # =========================
 # LOAD CSV FILE
 # =========================
-df = pd.read_csv("sales_data.csv")
+df = pd.read_csv("SALES_DATA.csv")
 
 # =========================
 # FEATURES & TARGET
