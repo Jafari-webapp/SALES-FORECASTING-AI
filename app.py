@@ -18,9 +18,15 @@ st.title("📈 Sales Forecast Dashboard")
 st.markdown("Machine Learning Sales Prediction System")
 
 # =========================
-# LOAD CSV FILE
-# =========================
-df = pd.read_csv("SALES_DATA.csv")
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    
+    st.write(df.head())
+
+else:
+    st.warning("Please upload your file")
 
 # =========================
 # FEATURES & TARGET
