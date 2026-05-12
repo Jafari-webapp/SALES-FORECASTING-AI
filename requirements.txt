@@ -1,7 +1,9 @@
 streamlit
+mysql.connector-python
 pandas
 numpy
 matplotlib
 scikit-learn
+reportlab
 plotly
 joblib
