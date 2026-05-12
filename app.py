@@ -1,190 +1,245 @@
 import streamlit as st
+import mysql.connector
 import pandas as pd
+import hashlib
 import numpy as np
-from sklearn.tree import DecisionTreeRegressor
-# =========================
-# PAGE CONFIG
-# =========================
-st.set_page_config(
-    page_title="Sales Forecast Dashboard",
-    page_icon="📊",
-    layout="wide"
-)
+from sklearn.linear_model import LinearRegression
+from reportlab.pdfgen import canvas
+from datetime import datetime
+import matplotlib.pyplot as plt
 
-# =========================
-# TITLE
-# =========================
-st.title("📈 Sales Forecast Dashboard")
-st.markdown("Machine Learning Sales Prediction System")
-
-# =========================
-uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
-
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    
-    st.write(df.head())
-
-else:
-    st.warning("Please upload your file")
-
-# =========================
-# FEATURES & TARGET
-# =========================
-X = df[["Quantity","Unit_Price","Discount_Percent","Profit"]]
-Y = df["Total_Sales"]
-
-# =========================
-# TRAIN MODEL
-# =========================
-model = DecisionTreeRegressor()
-model.fit(X_train, Y_train)
-preds = model.predict(X_test)
-st.write("📉 Model Performance")
-st.write("R² Score:", round(r2_score(y_test, preds), 4))
-st.write("MSE:", round(mean_squared_error(y_test, preds), 4))
-st.plotly_chart(
-   px.scatter(
-       x=y_test, y=preds,
-labels={"x": "Actual Sales", "y": "Predicted Sales"}
-    
-   ),
-use_container_width=True
+# ================= DATABASE =================
+def get_conn():
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="",
+        database="shop_db"
     )
 
-# =========================
-# SIDEBAR INPUTS
-# =========================
-st.sidebar.header("📥 Enter Sales Details")
+conn = get_conn()
+cur = conn.cursor()
 
-quantity = st.sidebar.number_input(
-    "Quantity",
-    min_value=1,
-    value=10
-)
+# ================= PASSWORD HASH =================
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
 
-unit_price = st.sidebar.number_input(
-    "Unit Price",
-    min_value=0.0,
-    value=50000.0
-)
+# ================= PAGE CONFIG =================
+st.set_page_config(page_title="Streamlit POS", layout="wide")
 
-discount = st.sidebar.slider(
-    "Discount Percent",
-    min_value=0,
-    max_value=100,
-    value=10
-)
+# ================= SESSION =================
+if "user" not in st.session_state:
+    st.session_state.user = None
 
-profit = st.sidebar.number_input(
-    "Profit",
-    min_value=0.0,
-    value=100000.0
-)
+# ================= LOGIN =================
+def login():
+    st.title("🔐 Login")
 
-# =========================
-# PREDICTION
-# =========================
-if st.button("🚀 Predict Total Sales"):
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
 
-    input_data = pd.DataFrame({
-        "Quantity": [quantity],
-        "Unit_Price": [unit_price],
-        "Discount_Percent": [discount],
-        "Profit": [profit]
-    })
+    if st.button("Login"):
+        cur.execute("SELECT * FROM users WHERE username=%s AND password=%s",
+                    (u, hash_pw(p)))
+        user = cur.fetchone()
 
-    prediction = model.predict(input_data)[0]
+        if user:
+            st.session_state.user = user
+            st.success("Login successful")
+            st.rerun()
+        else:
+            st.error("Wrong credentials")
 
-    confidence = np.random.uniform(90, 98)
+# ================= REGISTER =================
+def register():
+    st.title("🆕 Register")
 
-    # =========================
-    # RESULTS
-    # =========================
-    st.success(f"💰 Predicted Total Sales: TSh {prediction:,.0f}")
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
+    role = st.selectbox("Role", ["admin", "cashier"])
 
-    st.info(f"📊 Confidence Level: {confidence:.1f}%")
+    if st.button("Create"):
+        cur.execute("INSERT INTO users(username,password,role) VALUES(%s,%s,%s)",
+                    (u, hash_pw(p), role))
+        conn.commit()
+        st.success("Account created")
 
-    st.markdown("## 📌 Prediction Insights")
+# ================= RECEIPT =================
+def receipt(product, qty, total):
+    st.success("🧾 Receipt Generated")
+    st.write(f"Product: {product}")
+    st.write(f"Qty: {qty}")
+    st.write(f"Total: {total}")
+    st.write("Thank you!")
 
-    if quantity > 50:
-        st.write("✅ Large quantity may increase total sales")
+# ================= PDF REPORT =================
+def generate_pdf():
+    cur.execute("SELECT SUM(total) FROM sales")
+    total_sales = cur.fetchone()[0] or 0
 
-    if discount > 20:
-        st.write("✅ Higher discount can attract more customers")
+    cur.execute("SELECT COUNT(*) FROM products")
+    products = cur.fetchone()[0]
 
-    if profit > 200000:
-        st.write("✅ Profit margin looks strong")
+    cur.execute("SELECT product, SUM(qty) FROM sales GROUP BY product")
+    top = cur.fetchall()
 
-    if unit_price > 100000:
-        st.write("✅ High unit price increases revenue potential")
+    cur.execute("SELECT date, SUM(total) FROM sales GROUP BY date")
+    data = cur.fetchall()
 
-# =========================
-# FORECAST TABLE
-# =========================
-st.subheader("📅 Sales Forecast")
+    dates = [str(i[0]) for i in data]
+    values = [i[1] for i in data]
 
-forecast_df = pd.DataFrame({
-    "Day": [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday"
-    ],
+    # GRAPH
+    plt.figure()
+    plt.plot(dates, values, marker="o")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    graph = "graph.png"
+    plt.savefig(graph)
+    plt.close()
 
-    "Predicted Sales": [
-        2500000,
-        2800000,
-        3000000,
-        3200000,
-        3500000,
-        4000000,
-        4200000
-    ],
+    file = "report.pdf"
+    c = canvas.Canvas(file)
 
-    "Confidence (%)": [
-        92.5,
-        91.2,
-        93.1,
-        94.0,
-        95.3,
-        96.1,
-        97.0
-    ],
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(150, 800, "BUSINESS REPORT")
 
-    "Trend": [
-        "⬆",
-        "⬆",
-        "⬆",
-        "⬆",
-        "⬆",
-        "⬆",
-        "⬆"
-    ]
-})
+    c.setFont("Helvetica", 12)
+    c.drawString(50, 770, f"Date: {datetime.now()}")
 
-st.dataframe(
-    forecast_df,
-    use_container_width=True
-)
+    c.drawString(50, 740, f"Total Sales: {total_sales}")
+    c.drawString(50, 720, f"Products: {products}")
 
-# =========================
-# CHART
-# =========================
-st.subheader("📊 Weekly Sales Trend")
+    profit = total_sales * 0.3
+    c.drawString(50, 700, f"Profit Estimate: {profit}")
 
-chart_data = forecast_df.set_index("Day")
+    y = 660
+    c.drawString(50, 680, "Top Products:")
+    for t in top:
+        c.drawString(60, y, f"{t[0]} - {t[1]}")
+        y -= 20
 
-st.line_chart(chart_data["Predicted Sales"])
+    c.drawImage(graph, 50, 300, width=500, height=250)
 
-# =========================
-# FOOTER
-# =========================
-st.markdown("---")
-st.caption("© 2026 BizSmart Analytics | ML Sales Dashboard")
+    c.save()
+    return file
 
+# ================= DASHBOARD =================
+def dashboard():
+    st.title("📊 Dashboard")
 
+    cur.execute("SELECT SUM(total) FROM sales")
+    sales = cur.fetchone()[0] or 0
 
+    cur.execute("SELECT COUNT(*) FROM products")
+    prod = cur.fetchone()[0]
+
+    c1, c2 = st.columns(2)
+    c1.metric("Total Sales", sales)
+    c2.metric("Products", prod)
+
+# ================= PRODUCTS =================
+def products():
+    st.title("📦 Products")
+
+    n = st.text_input("Name")
+    p = st.number_input("Price")
+    s = st.number_input("Stock")
+
+    if st.button("Add"):
+        cur.execute("INSERT INTO products(name,price,stock) VALUES(%s,%s,%s)",
+                    (n, p, s))
+        conn.commit()
+        st.success("Added")
+
+    df = pd.read_sql("SELECT * FROM products", conn)
+    st.dataframe(df)
+
+    d = st.number_input("Delete ID")
+    if st.button("Delete"):
+        cur.execute("DELETE FROM products WHERE id=%s", (d,))
+        conn.commit()
+        st.warning("Deleted")
+
+# ================= SALES =================
+def sales():
+    st.title("💰 Sales")
+
+    df = pd.read_sql("SELECT * FROM products", conn)
+
+    if len(df) == 0:
+        st.warning("No products")
+        return
+
+    product = st.selectbox("Product", df["name"])
+    qty = st.number_input("Qty")
+
+    if st.button("Sell"):
+        price = df[df["name"] == product]["price"].values[0]
+        total = price * qty
+
+        cur.execute("INSERT INTO sales(product,qty,total) VALUES(%s,%s,%s)",
+                    (product, qty, total))
+        conn.commit()
+
+        receipt(product, qty, total)
+
+# ================= ML FORECAST =================
+def ml():
+    st.title("📈 Forecast")
+
+    df = pd.read_sql("SELECT * FROM sales", conn)
+
+    if len(df) < 3:
+        st.warning("Not enough data")
+        return
+
+    X = np.array(range(len(df))).reshape(-1,1)
+    y = df["total"]
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    pred = model.predict([[len(df)+1]])
+
+    st.success(f"Next Sales Prediction: {pred[0]:.2f}")
+
+# ================= MAIN =================
+if st.session_state.user is None:
+    opt = st.radio("Choose", ["Login", "Register"])
+
+    if opt == "Login":
+        login()
+    else:
+        register()
+
+else:
+    st.sidebar.write(f"👤 {st.session_state.user[1]}")
+
+    if st.sidebar.button("Logout"):
+        st.session_state.user = None
+        st.rerun()
+
+    menu = st.sidebar.selectbox("Menu",
+                                ["Dashboard", "Products", "Sales", "ML Forecast", "Report"])
+
+    if menu == "Dashboard":
+        dashboard()
+
+    elif menu == "Products":
+        products()
+
+    elif menu == "Sales":
+        sales()
+
+    elif menu == "ML Forecast":
+        ml()
+
+    elif menu == "Report":
+        st.title("📄 Business Report")
+
+        if st.button("Generate PDF"):
+            file = generate_pdf()
+
+            with open(file, "rb") as f:
+                st.download_button("Download Report", f, file_name="report.pdf")
