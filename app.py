@@ -22,6 +22,7 @@ st.set_page_config(page_title="POS System", layout="wide", page_icon="🛒")
 # ======================
 # DATABASE SETUP
 # ======================
+# ======================
 conn = sqlite3.connect("app.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -35,13 +36,13 @@ CREATE TABLE IF NOT EXISTS users(
 conn.commit()
 
 # ======================
-# PASSWORD HASH
+# HASH PASSWORD
 # ======================
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 # ======================
-# REGISTER USER
+# REGISTER
 # ======================
 def register_user(username, password):
     try:
@@ -50,12 +51,12 @@ def register_user(username, password):
             (username, hash_password(password))
         )
         conn.commit()
-        return "Account created successfully"
+        return True, "Account created successfully"
     except:
-        return "Username already exists"
+        return False, "Username already exists"
 
 # ======================
-# LOGIN USER
+# LOGIN
 # ======================
 def login_user(username, password):
     cursor.execute(
@@ -65,7 +66,7 @@ def login_user(username, password):
     return cursor.fetchone()
 
 # ======================
-# RESET PASSWORD
+# FORGOT PASSWORD
 # ======================
 def reset_password(username, new_password):
     cursor.execute("SELECT * FROM users WHERE username=?", (username,))
@@ -77,35 +78,48 @@ def reset_password(username, new_password):
             (hash_password(new_password), username)
         )
         conn.commit()
-        return "Password changed successfully"
+        return True, "Password changed successfully"
     else:
-        return "Username not found"
+        return False, "Username not found"
 
 # ======================
-# UI
+# SESSION STATE
 # ======================
-st.title("🔐 Login System")
-
-menu = st.sidebar.selectbox("Menu", ["Login", "Register", "Forgot Password"])
-
-# ======================
-# REGISTER
-# ======================
-if menu == "Register":
-    st.subheader("Create Account")
-
-    user = st.text_input("Username")
-    pwd = st.text_input("Password", type="password")
-
-    if st.button("Register"):
-        msg = register_user(user, pwd)
-        st.success(msg)
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.user = ""
 
 # ======================
-# LOGIN
+# LOGOUT
 # ======================
-elif menu == "Login":
-    st.subheader("Login")
+def logout():
+    st.session_state.logged_in = False
+    st.session_state.user = ""
+    st.rerun()
+
+# ======================
+# DASHBOARD
+# ======================
+def dashboard():
+    st.title("📊 SALES DASHBOARD")
+
+    st.success(f"Welcome {st.session_state.user} 🎉")
+
+    st.metric("Total Sales", "TZS 1,200,000")
+
+    st.subheader("Quick Actions")
+    st.write("👉 Add Products")
+    st.write("👉 View Reports")
+    st.write("👉 Download PDF")
+
+    if st.button("Logout"):
+        logout()
+
+# ======================
+# LOGIN PAGE
+# ======================
+def login_page():
+    st.title("🔐 Login")
 
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
@@ -113,22 +127,68 @@ elif menu == "Login":
     if st.button("Login"):
         result = login_user(user, pwd)
         if result:
-            st.success("Login successful 🎉")
+            st.session_state.logged_in = True
+            st.session_state.user = user
+            st.rerun()
         else:
-            st.error("Invalid username or password")
+            st.error("Invalid username or password ❌")
+
+# ======================
+# REGISTER PAGE
+# ======================
+def register_page():
+    st.title("📝 Register")
+
+    user = st.text_input("New Username")
+    pwd = st.text_input("New Password", type="password")
+
+    if st.button("Register"):
+        success, msg = register_user(user, pwd)
+        if success:
+            st.success(msg)
+            st.info("Now go to Login page 👈")
+        else:
+            st.error(msg)
 
 # ======================
 # FORGOT PASSWORD
 # ======================
-elif menu == "Forgot Password":
-    st.subheader("Reset Password")
+def forgot_page():
+    st.title("🔑 Forgot Password")
 
-    user = st.text_input("Enter Username")
+    user = st.text_input("Username")
     new_pwd = st.text_input("New Password", type="password")
 
-    if st.button("Reset"):
-        msg = reset_password(user, new_pwd)
-        st.info(msg)
+    if st.button("Reset Password"):
+        success, msg = reset_password(user, new_pwd)
+        if success:
+            st.success(msg)
+        else:
+            st.error(msg)
+
+# ======================
+# NAVIGATION
+# ======================
+if st.session_state.logged_in:
+    dashboard()
+else:
+    menu = st.sidebar.selectbox(
+        "Menu",
+        ["Login", "Register", "Forgot Password"]
+    )
+
+    if menu == "Login":
+        login_page()
+    elif menu == "Register":
+        register_page()
+    else:
+        forgot_page()
+
+
+
+
+
+
 
 
 # =========================
