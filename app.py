@@ -260,6 +260,23 @@ elif menu == "ML Prediction":
     else:
         st.warning("Not enough data")
 
+        import streamlit as st
+
+if st.button("Daily Report"):
+    file = make_pdf("Daily Sales Report", daily_data)
+    st.success("Report created!")
+
+    with open(file, "rb") as f:
+        st.download_button("Download Daily Report", f, file_name=file)
+
+if st.button("Weekly Report"):
+    file = make_pdf("Weekly Sales Report", weekly_data)
+    st.download_button("Download Weekly Report", open(file, "rb"), file_name=file)
+
+if st.button("Monthly Report"):
+    file = make_pdf("Monthly Sales Report", monthly_data)
+    st.download_button("Download Monthly Report", open(file, "rb"), file_name=file)
+
 # =========================
 
 
