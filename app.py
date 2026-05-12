@@ -17,12 +17,14 @@ import datetime
 st.set_page_config(page_title="POS System", layout="wide", page_icon="🛒")
 
 # =========================
-# DATABASE
 # =========================
-conn = sqlite3.connect("pos.db", check_same_thread=False)
+
+# ======================
+# DATABASE SETUP
+# ======================
+conn = sqlite3.connect("app.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# USERS TABLE
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,98 +32,90 @@ CREATE TABLE IF NOT EXISTS users(
     password TEXT
 )
 """)
-
-# PRODUCTS TABLE
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS products(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    price REAL,
-    stock INTEGER
-)
-""")
-
-# SALES TABLE
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS sales(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    product TEXT,
-    qty INTEGER,
-    total REAL,
-    date TEXT
-)
-""")
-
 conn.commit()
 
-# =========================
+# ======================
 # PASSWORD HASH
-# =========================
-def hash_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
+# ======================
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
-# default admin
-cursor.execute("SELECT * FROM users WHERE username='admin'")
-if not cursor.fetchone():
-    cursor.execute("INSERT INTO users(username,password) VALUES(?,?)",
-                   ("admin", hash_pw("1234")))
-    conn.commit()
+# ======================
+# REGISTER USER
+# ======================
+def register_user(username, password):
+    try:
+        cursor.execute(
+            "INSERT INTO users(username, password) VALUES(?,?)",
+            (username, hash_password(password))
+        )
+        conn.commit()
+        return "Account created successfully"
+    except:
+        return "Username already exists"
 
-# =========================
-# AUTH FUNCTIONS
-# =========================
-def login_user(u, p):
-    cursor.execute("SELECT * FROM users WHERE username=? AND password=?",
-                   (u, hash_pw(p)))
+# ======================
+# LOGIN USER
+# ======================
+def login_user(username, password):
+    cursor.execute(
+        "SELECT * FROM users WHERE username=? AND password=?",
+        (username, hash_password(password))
+    )
     return cursor.fetchone()
 
-def register_user(u, p):
-    try:
-        cursor.execute("INSERT INTO users(username,password) VALUES(?,?)",
-                       (u, hash_pw(p)))
+# ======================
+# RESET PASSWORD
+# ======================
+def reset_password(username, new_password):
+    cursor.execute("SELECT * FROM users WHERE username=?", (username,))
+    user = cursor.fetchone()
+
+    if user:
+        cursor.execute(
+            "UPDATE users SET password=? WHERE username=?",
+            (hash_password(new_password), username)
+        )
         conn.commit()
-        return True
-    except:
-        return False
+        return "Password changed successfully"
+    else:
+        return "Username not found"
 
-# =========================
-# SESSION
-# =========================
-if "auth" not in st.session_state:
-    st.session_state.auth = False
+# ======================
+# UI
+# ======================
+st.title("🔐 Login System")
 
-# =========================
-# LOGIN + REGISTER PAGE
-# =========================
-if not st.session_state.auth:
+menu = st.sidebar.selectbox("Menu", ["Login", "Register", "Forgot Password"])
 
-    st.title("🔐 PREFIX SALES SYSTEM")
+# ======================
+# REGISTER
+# ======================
+if menu == "Register":
+    st.subheader("Create Account")
 
-    mode = st.radio("Select", ["Login", "Register"])
+    user = st.text_input("Username")
+    pwd = st.text_input("Password", type="password")
 
-    if mode == "Login":
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
+    if st.button("Register"):
+        msg = register_user(user, pwd)
+        st.success(msg)
 
-        if st.button("Login"):
-            if login_user(u, p):
-                st.session_state.auth = True
-                st.success("Login Success")
-                st.rerun()
-            else:
-                st.error("Wrong Credentials")
+# ======================
+# LOGIN
+# ======================
+elif menu == "Login":
+    st.subheader("Login")
 
-    if mode == "Register":
-        nu = st.text_input("New Username")
-        np = st.text_input("New Password", type="password")
+    user = st.text_input("Username")
+    pwd = st.text_input("Password", type="password")
 
-        if st.button("Register"):
-            if register_user(nu, np):
-                st.success("Account Created! Login now")
-            else:
-                st.error("Username already exists")
-
-    st.stop()
+    if st.button("Login"):
+        result = login_user(user, pwd)
+        if result:
+            st.success("Login successful 🎉")
+        else:
+            st.error("Invalid username or password")
 
 # ======================
 # FORGOT PASSWORD
@@ -135,6 +129,7 @@ elif menu == "Forgot Password":
     if st.button("Reset"):
         msg = reset_password(user, new_pwd)
         st.info(msg)
+
 
 # =========================
 # SIDEBAR
