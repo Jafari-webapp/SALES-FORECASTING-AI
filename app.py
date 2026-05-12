@@ -127,7 +127,7 @@ if not st.session_state.auth:
 # =========================
 menu = st.sidebar.radio("Menu", [
     "Dashboard",
-    "Products
+    "Products"
     "Quantity"
     "Price"
     "Total Sales",
