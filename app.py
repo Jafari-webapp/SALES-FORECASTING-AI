@@ -123,6 +123,19 @@ if not st.session_state.auth:
 
     st.stop()
 
+# ======================
+# FORGOT PASSWORD
+# ======================
+elif menu == "Forgot Password":
+    st.subheader("Reset Password")
+
+    user = st.text_input("Enter Username")
+    new_pwd = st.text_input("New Password", type="password")
+
+    if st.button("Reset"):
+        msg = reset_password(user, new_pwd)
+        st.info(msg)
+
 # =========================
 # SIDEBAR
 # =========================
