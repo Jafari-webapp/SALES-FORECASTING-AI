@@ -1,245 +1,275 @@
+# =========================
+# 1. IMPORTS
+# =========================
 import streamlit as st
-import mysql.connector
+import sqlite3
 import pandas as pd
-import hashlib
 import numpy as np
+import hashlib
+import plotly.express as px
 from sklearn.linear_model import LinearRegression
-from reportlab.pdfgen import canvas
-from datetime import datetime
-import matplotlib.pyplot as plt
+from fpdf import FPDF
+import datetime
 
-# ================= DATABASE =================
-def get_conn():
-    return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="",
-        database="shop_db"
-    )
+# =========================
+# 2. PAGE CONFIG
+# =========================
+st.set_page_config(
+    page_title="Smart POS System",
+    layout="wide",
+    page_icon="🛒"
+)
 
-conn = get_conn()
-cur = conn.cursor()
+# =========================
+# 3. DATABASE
+# =========================
+conn = sqlite3.connect("pos.db", check_same_thread=False)
+cursor = conn.cursor()
 
-# ================= PASSWORD HASH =================
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT,
+    password TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS products(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    price REAL,
+    stock INTEGER
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS sales(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product TEXT,
+    qty INTEGER,
+    total REAL,
+    date TEXT
+)
+""")
+
+conn.commit()
+
+# =========================
+# 4. PASSWORD HASH
+# =========================
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
-# ================= PAGE CONFIG =================
-st.set_page_config(page_title="Streamlit POS", layout="wide")
+# default admin
+cursor.execute("SELECT * FROM users WHERE username='admin'")
+if not cursor.fetchone():
+    cursor.execute("INSERT INTO users(username,password) VALUES(?,?)",
+                   ("admin", hash_pw("1234")))
+    conn.commit()
 
-# ================= SESSION =================
-if "user" not in st.session_state:
-    st.session_state.user = None
+# =========================
+# 5. LOGIN
+# =========================
+def login(u, p):
+    cursor.execute("SELECT * FROM users WHERE username=? AND password=?",
+                   (u, hash_pw(p)))
+    return cursor.fetchone()
 
-# ================= LOGIN =================
-def login():
-    st.title("🔐 Login")
+if "login" not in st.session_state:
+    st.session_state.login = False
+
+if not st.session_state.login:
+
+    st.title("🔐 POS LOGIN")
 
     u = st.text_input("Username")
     p = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        cur.execute("SELECT * FROM users WHERE username=%s AND password=%s",
-                    (u, hash_pw(p)))
-        user = cur.fetchone()
-
-        if user:
-            st.session_state.user = user
-            st.success("Login successful")
+        if login(u, p):
+            st.session_state.login = True
+            st.success("Login Success")
             st.rerun()
         else:
-            st.error("Wrong credentials")
+            st.error("Wrong Credentials")
 
-# ================= REGISTER =================
-def register():
-    st.title("🆕 Register")
+    st.stop()
 
-    u = st.text_input("Username")
-    p = st.text_input("Password", type="password")
-    role = st.selectbox("Role", ["admin", "cashier"])
+# =========================
+# 6. SIDEBAR
+# =========================
+menu = st.sidebar.radio("Menu", [
+    "Dashboard",
+    "Products CRUD",
+    "Sales",
+    "ML Prediction",
+    "Invoice PDF"
+])
 
-    if st.button("Create"):
-        cur.execute("INSERT INTO users(username,password,role) VALUES(%s,%s,%s)",
-                    (u, hash_pw(p), role))
-        conn.commit()
-        st.success("Account created")
+# =========================
+# 7. DASHBOARD
+# =========================
+if menu == "Dashboard":
 
-# ================= RECEIPT =================
-def receipt(product, qty, total):
-    st.success("🧾 Receipt Generated")
-    st.write(f"Product: {product}")
-    st.write(f"Qty: {qty}")
-    st.write(f"Total: {total}")
-    st.write("Thank you!")
-
-# ================= PDF REPORT =================
-def generate_pdf():
-    cur.execute("SELECT SUM(total) FROM sales")
-    total_sales = cur.fetchone()[0] or 0
-
-    cur.execute("SELECT COUNT(*) FROM products")
-    products = cur.fetchone()[0]
-
-    cur.execute("SELECT product, SUM(qty) FROM sales GROUP BY product")
-    top = cur.fetchall()
-
-    cur.execute("SELECT date, SUM(total) FROM sales GROUP BY date")
-    data = cur.fetchall()
-
-    dates = [str(i[0]) for i in data]
-    values = [i[1] for i in data]
-
-    # GRAPH
-    plt.figure()
-    plt.plot(dates, values, marker="o")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    graph = "graph.png"
-    plt.savefig(graph)
-    plt.close()
-
-    file = "report.pdf"
-    c = canvas.Canvas(file)
-
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(150, 800, "BUSINESS REPORT")
-
-    c.setFont("Helvetica", 12)
-    c.drawString(50, 770, f"Date: {datetime.now()}")
-
-    c.drawString(50, 740, f"Total Sales: {total_sales}")
-    c.drawString(50, 720, f"Products: {products}")
-
-    profit = total_sales * 0.3
-    c.drawString(50, 700, f"Profit Estimate: {profit}")
-
-    y = 660
-    c.drawString(50, 680, "Top Products:")
-    for t in top:
-        c.drawString(60, y, f"{t[0]} - {t[1]}")
-        y -= 20
-
-    c.drawImage(graph, 50, 300, width=500, height=250)
-
-    c.save()
-    return file
-
-# ================= DASHBOARD =================
-def dashboard():
     st.title("📊 Dashboard")
 
-    cur.execute("SELECT SUM(total) FROM sales")
-    sales = cur.fetchone()[0] or 0
+    col1, col2, col3 = st.columns(3)
 
-    cur.execute("SELECT COUNT(*) FROM products")
-    prod = cur.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM products")
+    products_count = cursor.fetchone()[0]
 
-    c1, c2 = st.columns(2)
-    c1.metric("Total Sales", sales)
-    c2.metric("Products", prod)
+    cursor.execute("SELECT SUM(total) FROM sales")
+    total_sales = cursor.fetchone()[0] or 0
 
-# ================= PRODUCTS =================
-def products():
-    st.title("📦 Products")
+    cursor.execute("SELECT SUM(stock) FROM products")
+    stock = cursor.fetchone()[0] or 0
 
-    n = st.text_input("Name")
-    p = st.number_input("Price")
-    s = st.number_input("Stock")
+    col1.metric("Products", products_count)
+    col2.metric("Sales", total_sales)
+    col3.metric("Stock", stock)
 
-    if st.button("Add"):
-        cur.execute("INSERT INTO products(name,price,stock) VALUES(%s,%s,%s)",
-                    (n, p, s))
-        conn.commit()
-        st.success("Added")
+    # SALES GRAPH
+    df = pd.read_sql("SELECT date,total FROM sales", conn)
 
-    df = pd.read_sql("SELECT * FROM products", conn)
-    st.dataframe(df)
+    if not df.empty:
+        fig = px.line(df, x="date", y="total", title="Sales Trend")
+        st.plotly_chart(fig, use_container_width=True)
 
-    d = st.number_input("Delete ID")
-    if st.button("Delete"):
-        cur.execute("DELETE FROM products WHERE id=%s", (d,))
-        conn.commit()
-        st.warning("Deleted")
+        fig2 = px.pie(df, values="total", names="date")
+        st.plotly_chart(fig2, use_container_width=True)
 
-# ================= SALES =================
-def sales():
+# =========================
+# 8. PRODUCTS CRUD
+# =========================
+elif menu == "Products CRUD":
+
+    st.title("📦 Products CRUD")
+
+    action = st.selectbox("Action", ["Add", "View", "Update", "Delete"])
+
+    # ADD
+    if action == "Add":
+        name = st.text_input("Product Name")
+        price = st.number_input("Price")
+        stock = st.number_input("Stock")
+
+        if st.button("Save"):
+            cursor.execute("INSERT INTO products(name,price,stock) VALUES(?,?,?)",
+                           (name, price, stock))
+            conn.commit()
+            st.success("Product Added")
+
+    # VIEW
+    if action == "View":
+        df = pd.read_sql("SELECT * FROM products", conn)
+        st.dataframe(df)
+
+    # UPDATE
+    if action == "Update":
+        id = st.number_input("Product ID")
+        price = st.number_input("New Price")
+
+        if st.button("Update"):
+            cursor.execute("UPDATE products SET price=? WHERE id=?",
+                           (price, id))
+            conn.commit()
+            st.success("Updated")
+
+    # DELETE
+    if action == "Delete":
+        id = st.number_input("Product ID")
+
+        if st.button("Delete"):
+            cursor.execute("DELETE FROM products WHERE id=?",
+                           (id,))
+            conn.commit()
+            st.success("Deleted")
+
+# =========================
+# 9. SALES SYSTEM
+# =========================
+elif menu == "Sales":
+
     st.title("💰 Sales")
 
-    df = pd.read_sql("SELECT * FROM products", conn)
+    products = pd.read_sql("SELECT * FROM products", conn)
 
-    if len(df) == 0:
-        st.warning("No products")
-        return
+    if not products.empty:
 
-    product = st.selectbox("Product", df["name"])
-    qty = st.number_input("Qty")
+        product = st.selectbox("Select Product", products["name"])
+        qty = st.number_input("Quantity", min_value=1)
 
-    if st.button("Sell"):
-        price = df[df["name"] == product]["price"].values[0]
+        price = products[products["name"] == product]["price"].values[0]
         total = price * qty
 
-        cur.execute("INSERT INTO sales(product,qty,total) VALUES(%s,%s,%s)",
-                    (product, qty, total))
-        conn.commit()
+        st.write("Total:", total)
 
-        receipt(product, qty, total)
+        if st.button("Sell"):
+            date = str(datetime.date.today())
 
-# ================= ML FORECAST =================
-def ml():
-    st.title("📈 Forecast")
+            cursor.execute("INSERT INTO sales(product,qty,total,date) VALUES(?,?,?,?)",
+                           (product, qty, total, date))
 
-    df = pd.read_sql("SELECT * FROM sales", conn)
+            conn.commit()
+            st.success("Sale Recorded")
 
-    if len(df) < 3:
-        st.warning("Not enough data")
-        return
+# =========================
+# 10. ML PREDICTION
+# =========================
+elif menu == "ML Prediction":
 
-    X = np.array(range(len(df))).reshape(-1,1)
-    y = df["total"]
+    st.title("🤖 Sales Prediction")
 
-    model = LinearRegression()
-    model.fit(X, y)
+    df = pd.read_sql("SELECT date,total FROM sales", conn)
 
-    pred = model.predict([[len(df)+1]])
+    if len(df) > 2:
 
-    st.success(f"Next Sales Prediction: {pred[0]:.2f}")
+        df["day"] = np.arange(len(df))
 
-# ================= MAIN =================
-if st.session_state.user is None:
-    opt = st.radio("Choose", ["Login", "Register"])
+        X = df[["day"]]
+        y = df["total"]
 
-    if opt == "Login":
-        login()
+        model = LinearRegression()
+        model.fit(X, y)
+
+        future = np.array([[len(df)+1]])
+        pred = model.predict(future)[0]
+
+        st.success(f"Predicted Next Sales: {pred:,.0f}")
+
     else:
-        register()
+        st.warning("Not enough data")
 
-else:
-    st.sidebar.write(f"👤 {st.session_state.user[1]}")
+# =========================
+# 11. INVOICE PDF
+# =========================
+elif menu == "Invoice PDF":
 
-    if st.sidebar.button("Logout"):
-        st.session_state.user = None
-        st.rerun()
+    st.title("🧾 Invoice Generator")
 
-    menu = st.sidebar.selectbox("Menu",
-                                ["Dashboard", "Products", "Sales", "ML Forecast", "Report"])
+    product = st.text_input("Product")
+    qty = st.number_input("Qty", min_value=1)
+    price = st.number_input("Price")
 
-    if menu == "Dashboard":
-        dashboard()
+    if st.button("Generate PDF"):
 
-    elif menu == "Products":
-        products()
+        total = qty * price
 
-    elif menu == "Sales":
-        sales()
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
 
-    elif menu == "ML Forecast":
-        ml()
+        pdf.cell(200, 10, txt="POS INVOICE", ln=True, align="C")
+        pdf.cell(200, 10, txt=f"Product: {product}", ln=True)
+        pdf.cell(200, 10, txt=f"Qty: {qty}", ln=True)
+        pdf.cell(200, 10, txt=f"Total: {total}", ln=True)
 
-    elif menu == "Report":
-        st.title("📄 Business Report")
+        pdf.output("invoice.pdf")
 
-        if st.button("Generate PDF"):
-            file = generate_pdf()
+        with open("invoice.pdf", "rb") as f:
+            st.download_button("Download Invoice", f, "invoice.pdf")
 
-            with open(file, "rb") as f:
-                st.download_button("Download Report", f, file_name="report.pdf")
+# =========================
+# END
+# =========================
