@@ -94,7 +94,7 @@ if "auth" not in st.session_state:
 # =========================
 if not st.session_state.auth:
 
-    st.title("🔐 SMART POS AUTH SYSTEM")
+    st.title("🔐 PREFIX SALES SYSTEM")
 
     mode = st.radio("Select", ["Login", "Register"])
 
@@ -127,10 +127,13 @@ if not st.session_state.auth:
 # =========================
 menu = st.sidebar.radio("Menu", [
     "Dashboard",
-    "Products",
-    "Sales",
+    "Products
+    "Quantity"
+    "Price"
+    "Total Sales",
+    "Date"
     "ML Prediction",
-    "Invoice PDF"
+  
 ])
 
 # =========================
