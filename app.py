@@ -8,7 +8,6 @@ import numpy as np
 import hashlib
 import plotly.express as px
 from sklearn.linear_model import LinearRegression
-from fpdf import FPDF
 import datetime
 
 # =========================
@@ -243,32 +242,9 @@ elif menu == "ML Prediction":
 
 # =========================
 # 11. INVOICE PDF
-# =========================
-elif menu == "Invoice PDF":
+# ==================
 
-    st.title("🧾 Invoice Generator")
-
-    product = st.text_input("Product")
-    qty = st.number_input("Qty", min_value=1)
-    price = st.number_input("Price")
-
-    if st.button("Generate PDF"):
-
-        total = qty * price
-
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-
-        pdf.cell(200, 10, txt="POS INVOICE", ln=True, align="C")
-        pdf.cell(200, 10, txt=f"Product: {product}", ln=True)
-        pdf.cell(200, 10, txt=f"Qty: {qty}", ln=True)
-        pdf.cell(200, 10, txt=f"Total: {total}", ln=True)
-
-        pdf.output("invoice.pdf")
-
-        with open("invoice.pdf", "rb") as f:
-            st.download_button("Download Invoice", f, "invoice.pdf")
+ 
 
 # =========================
 # END
