@@ -16,6 +16,55 @@ import datetime
 # =========================
 st.set_page_config(page_title="POS System", layout="wide", page_icon="🛒")
 
+import streamlit as st
+
+st.set_page_config(
+    page_title="Sales Dashboard",
+    page_icon="📊",
+    layout="wide"
+)
+
+st.markdown("""
+    <style>
+    /* Background */
+    .stApp {
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        color: white;
+    }
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #111827;
+    }
+
+    /* Buttons */
+    div.stButton > button {
+        background-color: #ff4b4b;
+        color: white;
+        border-radius: 10px;
+        padding: 10px;
+        font-weight: bold;
+    }
+
+    div.stButton > button:hover {
+        background-color: #00c9a7;
+        color: black;
+    }
+
+    /* Metrics cards */
+    div[data-testid="metric-container"] {
+        background-color: rgba(255,255,255,0.1);
+        padding: 15px;
+        border-radius: 15px;
+    }
+
+    /* Titles */
+    h1, h2, h3 {
+        color: #00ffcc;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # =========================
 # =========================
 
