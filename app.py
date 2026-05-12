@@ -1,5 +1,5 @@
 # =========================
-# 1. IMPORTS
+# IMPORTS
 # =========================
 import streamlit as st
 import sqlite3
@@ -11,28 +11,26 @@ from sklearn.linear_model import LinearRegression
 import datetime
 
 # =========================
-# 2. PAGE CONFIG
+# PAGE CONFIG
 # =========================
-st.set_page_config(
-    page_title="Smart POS System",
-    layout="wide",
-    page_icon="🛒"
-)
+st.set_page_config(page_title="POS System", layout="wide", page_icon="🛒")
 
 # =========================
-# 3. DATABASE
+# DATABASE
 # =========================
 conn = sqlite3.connect("pos.db", check_same_thread=False)
 cursor = conn.cursor()
 
+# USERS TABLE
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT,
+    username TEXT UNIQUE,
     password TEXT
 )
 """)
 
+# PRODUCTS TABLE
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS products(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,6 +40,7 @@ CREATE TABLE IF NOT EXISTS products(
 )
 """)
 
+# SALES TABLE
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS sales(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +54,7 @@ CREATE TABLE IF NOT EXISTS sales(
 conn.commit()
 
 # =========================
-# 4. PASSWORD HASH
+# PASSWORD HASH
 # =========================
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -68,46 +67,74 @@ if not cursor.fetchone():
     conn.commit()
 
 # =========================
-# 5. LOGIN
+# AUTH FUNCTIONS
 # =========================
-def login(u, p):
+def login_user(u, p):
     cursor.execute("SELECT * FROM users WHERE username=? AND password=?",
                    (u, hash_pw(p)))
     return cursor.fetchone()
 
-if "login" not in st.session_state:
-    st.session_state.login = False
+def register_user(u, p):
+    try:
+        cursor.execute("INSERT INTO users(username,password) VALUES(?,?)",
+                       (u, hash_pw(p)))
+        conn.commit()
+        return True
+    except:
+        return False
 
-if not st.session_state.login:
+# =========================
+# SESSION
+# =========================
+if "auth" not in st.session_state:
+    st.session_state.auth = False
 
-    st.title("🔐 POS LOGIN")
+# =========================
+# LOGIN + REGISTER PAGE
+# =========================
+if not st.session_state.auth:
 
-    u = st.text_input("Username")
-    p = st.text_input("Password", type="password")
+    st.title("🔐 SMART POS AUTH SYSTEM")
 
-    if st.button("Login"):
-        if login(u, p):
-            st.session_state.login = True
-            st.success("Login Success")
-            st.rerun()
-        else:
-            st.error("Wrong Credentials")
+    mode = st.radio("Select", ["Login", "Register"])
+
+    if mode == "Login":
+        u = st.text_input("Username")
+        p = st.text_input("Password", type="password")
+
+        if st.button("Login"):
+            if login_user(u, p):
+                st.session_state.auth = True
+                st.success("Login Success")
+                st.rerun()
+            else:
+                st.error("Wrong Credentials")
+
+    if mode == "Register":
+        nu = st.text_input("New Username")
+        np = st.text_input("New Password", type="password")
+
+        if st.button("Register"):
+            if register_user(nu, np):
+                st.success("Account Created! Login now")
+            else:
+                st.error("Username already exists")
 
     st.stop()
 
 # =========================
-# 6. SIDEBAR
+# SIDEBAR
 # =========================
 menu = st.sidebar.radio("Menu", [
     "Dashboard",
-    "Products CRUD",
+    "Products",
     "Sales",
     "ML Prediction",
     "Invoice PDF"
 ])
 
 # =========================
-# 7. DASHBOARD
+# DASHBOARD
 # =========================
 if menu == "Dashboard":
 
@@ -115,41 +142,36 @@ if menu == "Dashboard":
 
     col1, col2, col3 = st.columns(3)
 
-    cursor.execute("SELECT COUNT(*) FROM products")
-    products_count = cursor.fetchone()[0]
+    products = cursor.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+    sales = cursor.execute("SELECT SUM(total) FROM sales").fetchone()[0] or 0
+    stock = cursor.execute("SELECT SUM(stock) FROM products").fetchone()[0] or 0
 
-    cursor.execute("SELECT SUM(total) FROM sales")
-    total_sales = cursor.fetchone()[0] or 0
-
-    cursor.execute("SELECT SUM(stock) FROM products")
-    stock = cursor.fetchone()[0] or 0
-
-    col1.metric("Products", products_count)
-    col2.metric("Sales", total_sales)
+    col1.metric("Products", products)
+    col2.metric("Sales", sales)
     col3.metric("Stock", stock)
 
-    # SALES GRAPH
     df = pd.read_sql("SELECT date,total FROM sales", conn)
 
     if not df.empty:
-        fig = px.line(df, x="date", y="total", title="Sales Trend")
+        st.subheader("📈 Sales Chart")
+        fig = px.line(df, x="date", y="total", markers=True)
         st.plotly_chart(fig, use_container_width=True)
 
-        fig2 = px.pie(df, values="total", names="date")
+        st.subheader("🥧 Sales Distribution")
+        fig2 = px.pie(df, values="total", names="date", hole=0.5)
         st.plotly_chart(fig2, use_container_width=True)
 
 # =========================
-# 8. PRODUCTS CRUD
+# PRODUCTS CRUD
 # =========================
-elif menu == "Products CRUD":
+elif menu == "Products":
 
     st.title("📦 Products CRUD")
 
     action = st.selectbox("Action", ["Add", "View", "Update", "Delete"])
 
-    # ADD
     if action == "Add":
-        name = st.text_input("Product Name")
+        name = st.text_input("Name")
         price = st.number_input("Price")
         stock = st.number_input("Stock")
 
@@ -157,47 +179,43 @@ elif menu == "Products CRUD":
             cursor.execute("INSERT INTO products(name,price,stock) VALUES(?,?,?)",
                            (name, price, stock))
             conn.commit()
-            st.success("Product Added")
+            st.success("Added")
 
-    # VIEW
     if action == "View":
-        df = pd.read_sql("SELECT * FROM products", conn)
-        st.dataframe(df)
+        st.dataframe(pd.read_sql("SELECT * FROM products", conn))
 
-    # UPDATE
     if action == "Update":
-        id = st.number_input("Product ID")
+        pid = st.number_input("Product ID")
         price = st.number_input("New Price")
 
         if st.button("Update"):
             cursor.execute("UPDATE products SET price=? WHERE id=?",
-                           (price, id))
+                           (price, pid))
             conn.commit()
             st.success("Updated")
 
-    # DELETE
     if action == "Delete":
-        id = st.number_input("Product ID")
+        pid = st.number_input("Product ID")
 
         if st.button("Delete"):
             cursor.execute("DELETE FROM products WHERE id=?",
-                           (id,))
+                           (pid,))
             conn.commit()
             st.success("Deleted")
 
 # =========================
-# 9. SALES SYSTEM
+# SALES
 # =========================
 elif menu == "Sales":
 
-    st.title("💰 Sales")
+    st.title("💰 Sales System")
 
     products = pd.read_sql("SELECT * FROM products", conn)
 
     if not products.empty:
 
-        product = st.selectbox("Select Product", products["name"])
-        qty = st.number_input("Quantity", min_value=1)
+        product = st.selectbox("Product", products["name"])
+        qty = st.number_input("Qty", min_value=1)
 
         price = products[products["name"] == product]["price"].values[0]
         total = price * qty
@@ -209,43 +227,39 @@ elif menu == "Sales":
 
             cursor.execute("INSERT INTO sales(product,qty,total,date) VALUES(?,?,?,?)",
                            (product, qty, total, date))
-
             conn.commit()
             st.success("Sale Recorded")
 
 # =========================
-# 10. ML PREDICTION
+# ML PREDICTION
 # =========================
 elif menu == "ML Prediction":
 
     st.title("🤖 Sales Prediction")
 
-    df = pd.read_sql("SELECT date,total FROM sales", conn)
+    df = pd.read_sql("SELECT * FROM sales", conn)
 
-    if len(df) > 2:
+    if len(df) > 3:
 
-        df["day"] = np.arange(len(df))
+        df["x"] = np.arange(len(df))
 
-        X = df[["day"]]
+        X = df[["x"]]
         y = df["total"]
 
         model = LinearRegression()
         model.fit(X, y)
 
-        future = np.array([[len(df)+1]])
-        pred = model.predict(future)[0]
+        pred = model.predict([[len(df)+1]])[0]
 
-        st.success(f"Predicted Next Sales: {pred:,.0f}")
+        st.success(f"Next Sales Prediction: {pred:,.0f}")
 
     else:
         st.warning("Not enough data")
 
 # =========================
-# 11. INVOICE PDF
-# ==================
 
- 
 
+    
 # =========================
 # END
 # =========================
