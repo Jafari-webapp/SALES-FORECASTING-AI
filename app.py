@@ -402,6 +402,7 @@ elif menu == "ML Prediction":
         st.warning("Not enough data")
 
 
+st.markdown("© 2026 Powered by Jafari Tech All Rights Reserved")
 
 # =========================
 
