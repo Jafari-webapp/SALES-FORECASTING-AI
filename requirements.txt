@@ -1,5 +1,5 @@
 streamlit
-mysql.connector-python
+sqlite3
 pandas
 numpy
 matplotlib
