@@ -1,413 +1,171 @@
-
-# =========================
-# IMPORTS
-# =========================
 import streamlit as st
-import sqlite3
 import pandas as pd
-import numpy as np
-import hashlib
-import plotly.express as px
-from sklearn.linear_model import LinearRegression
-import datetime
-
-# =========================
-# PAGE CONFIG
-# =========================
-st.set_page_config(page_title="POS System", layout="wide", page_icon="🛒")
-
-import streamlit as st
+import altair as alt
 
 st.set_page_config(
-    page_title="Sales Dashboard",
+    page_title="Sales Dashboard Analysis",
     page_icon="📊",
-    layout="wide"
+    layout="wide",
 )
 
-st.markdown("""
-    <style>
-    /* Background */
-    .stApp {
-        background: linear-gradient(135deg, #1e3c72, #2a5298);
-        color: white;
-    }
-
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background-color: #111827;
-    }
-
-    /* Buttons */
-    div.stButton > button {
-        background-color: #ff4b4b;
-        color: white;
-        border-radius: 10px;
-        padding: 10px;
-        font-weight: bold;
-    }
-
-    div.stButton > button:hover {
-        background-color: #00c9a7;
-        color: black;
-    }
-
-    /* Metrics cards */
-    div[data-testid="metric-container"] {
-        background-color: rgba(255,255,255,0.1);
-        padding: 15px;
-        border-radius: 15px;
-    }
-
-    /* Titles */
-    h1, h2, h3 {
-        color: #00ffcc;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# =========================
-# =========================
-
-# ======================
-# DATABASE SETUP
-# ======================
-# ======================
-conn = sqlite3.connect("app.db", check_same_thread=False)
-cursor = conn.cursor()
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    password TEXT
+st.title("Sales Dashboard Analysis")
+st.markdown(
+    "This dashboard shows sales performance, region comparison, and month-over-month trends with color-coded insights."
 )
-""")
-conn.commit()
 
-# ======================
-# HASH PASSWORD
-# ======================
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+# Sample sales data
+months = [
+    "Jan 2025",
+    "Feb 2025",
+    "Mar 2025",
+    "Apr 2025",
+    "May 2025",
+    "Jun 2025",
+    "Jul 2025",
+    "Aug 2025",
+    "Sep 2025",
+    "Oct 2025",
+    "Nov 2025",
+    "Dec 2025",
+]
+regions = ["North", "South", "East", "West"]
+products = ["Widget", "Gadget", "Service"]
 
-# ======================
-# REGISTER
-# ======================
-def register_user(username, password):
-    try:
-        cursor.execute(
-            "INSERT INTO users(username, password) VALUES(?,?)",
-            (username, hash_password(password))
-        )
-        conn.commit()
-        return True, "Account created successfully"
-    except:
-        return False, "Username already exists"
+rows = []
+for month in months:
+    for region in regions:
+        for product in products:
+            sales = int(
+                30000
+                + 10000 * regions.index(region)
+                + 4000 * products.index(product)
+                + (months.index(month) * 1500)
+                + (regions.index(region) * 400)
+            )
+            orders = int(70 + 15 * products.index(product) + 3 * months.index(month))
+            rows.append(
+                {
+                    "Month": month,
+                    "Region": region,
+                    "Product": product,
+                    "Sales": sales,
+                    "Orders": orders,
+                }
+            )
 
-# ======================
-# LOGIN
-# ======================
-def login_user(username, password):
-    cursor.execute(
-        "SELECT * FROM users WHERE username=? AND password=?",
-        (username, hash_password(password))
+df = pd.DataFrame(rows)
+
+# Sidebar filters
+st.sidebar.header("Filters")
+selected_region = st.sidebar.selectbox("Choose region", ["All"] + regions)
+selected_product = st.sidebar.selectbox("Choose product", ["All"] + products)
+selected_month = st.sidebar.selectbox("Choose month", ["All"] + months)
+
+filtered = df.copy()
+if selected_region != "All":
+    filtered = filtered[filtered["Region"] == selected_region]
+if selected_product != "All":
+    filtered = filtered[filtered["Product"] == selected_product]
+if selected_month != "All":
+    filtered = filtered[filtered["Month"] == selected_month]
+
+# Key metrics
+sales_total = filtered["Sales"].sum()
+orders_total = filtered["Orders"].sum()
+avg_order_value = sales_total / orders_total if orders_total else 0
+
+latest_month = filtered["Month"].max() if not filtered.empty else None
+previous_month = None
+if latest_month:
+    months_ordered = [m for m in months if m != latest_month]
+    previous_month = months_ordered[-1] if months_ordered else None
+
+sales_change = 0
+if latest_month and previous_month is not None:
+    latest_sum = filtered[filtered["Month"] == latest_month]["Sales"].sum()
+    previous_sum = filtered[filtered["Month"] == previous_month]["Sales"].sum()
+    if previous_sum:
+        sales_change = (latest_sum - previous_sum) / previous_sum * 100
+
+color_code = "green" if sales_change >= 5 else "orange" if sales_change >= 0 else "red"
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total Sales", f"${sales_total:,.0f}")
+col2.metric("Total Orders", f"{orders_total:,}")
+col3.metric("Avg Order Value", f"${avg_order_value:,.2f}")
+col4.metric(
+    "Sales Change",
+    f"{sales_change:+.1f}%",
+    delta_color="normal",
+)
+
+st.markdown(
+    f"**Color code**: <span style='color:green'>Green = strong growth</span>, <span style='color:orange'>Orange = flat/moderate</span>, <span style='color:red'>Red = decline</span>.",
+    unsafe_allow_html=True,
+)
+
+# Sales by month chart
+monthly = (
+    filtered.groupby("Month", sort=False)["Sales"]
+    .sum()
+    .reset_index()
+)
+
+sales_line = (
+    alt.Chart(monthly)
+    .mark_line(point=True)
+    .encode(
+        x=alt.X("Month", sort=months, title="Month"),
+        y=alt.Y("Sales", title="Sales ($)"),
+        tooltip=["Month", alt.Tooltip("Sales", format="$,.")],
     )
-    return cursor.fetchone()
+    .properties(title="Sales Trend by Month", width=750, height=360)
+)
 
-# ======================
-# FORGOT PASSWORD
-# ======================
-def reset_password(username, new_password):
-    cursor.execute("SELECT * FROM users WHERE username=?", (username,))
-    user = cursor.fetchone()
+# Sales by region chart
+region_summary = (
+    filtered.groupby("Region")["Sales"]
+    .sum()
+    .reset_index()
+    .sort_values("Sales", ascending=False)
+)
 
-    if user:
-        cursor.execute(
-            "UPDATE users SET password=? WHERE username=?",
-            (hash_password(new_password), username)
-        )
-        conn.commit()
-        return True, "Password changed successfully"
-    else:
-        return False, "Username not found"
-
-# ======================
-# SESSION STATE
-# ======================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user = ""
-
-# ======================
-# LOGOUT
-# ======================
-def logout():
-    st.session_state.logged_in = False
-    st.session_state.user = ""
-    st.rerun()
-
-# ======================
-# DASHBOARD
-# ======================
-def dashboard():
-    st.title("📊 SALES DASHBOARD")
-
-    st.success(f"Welcome {st.session_state.user} 🎉")
-
-    st.metric("Total Sales", "TZS 1,200,000")
-
-    st.subheader("Quick Actions")
-    st.write("👉 Add Products")
-    st.write("👉 View Reports")
-    st.write("👉 Download PDF")
-
-    if st.button("Logout"):
-        logout()
-
-# ======================
-# LOGIN PAGE
-# ======================
-def login_page():
-    st.title("🔐 Login")
-
-    user = st.text_input("Username")
-    pwd = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        result = login_user(user, pwd)
-        if result:
-            st.session_state.logged_in = True
-            st.session_state.user = user
-            st.rerun()
-        else:
-            st.error("Invalid username or password ❌")
-
-# ======================
-# REGISTER PAGE
-# ======================
-def register_page():
-    st.title("📝 Register")
-
-    user = st.text_input("New Username")
-    pwd = st.text_input("New Password", type="password")
-
-    if st.button("Register"):
-        success, msg = register_user(user, pwd)
-        if success:
-            st.success(msg)
-            st.info("Now go to Login page 👈")
-        else:
-            st.error(msg)
-
-# ======================
-# FORGOT PASSWORD
-# ======================
-def forgot_page():
-    st.title("🔑 Forgot Password")
-
-    user = st.text_input("Username")
-    new_pwd = st.text_input("New Password", type="password")
-
-    if st.button("Reset Password"):
-        success, msg = reset_password(user, new_pwd)
-        if success:
-            st.success(msg)
-        else:
-            st.error(msg)
-
-# ======================
-# NAVIGATION
-# ======================
-if st.session_state.logged_in:
-    dashboard()
-else:
-    menu = st.sidebar.selectbox(
-        "Menu",
-        ["Login", "Register", "Forgot Password"]
+region_bar = (
+    alt.Chart(region_summary)
+    .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+    .encode(
+        x=alt.X("Region", sort="-y", title="Region"),
+        y=alt.Y("Sales", title="Sales ($)"),
+        color=alt.Color(
+            "Sales",
+            scale=alt.Scale(scheme="tealblues"),
+            legend=None,
+        ),
+        tooltip=["Region", alt.Tooltip("Sales", format="$,.")],
     )
+    .properties(title="Sales by Region", width=500, height=360)
+)
 
-    if menu == "Login":
-        login_page()
-    elif menu == "Register":
-        register_page()
-    else:
-        forgot_page()
+# Layout charts
+left, right = st.columns([2, 1])
+left.altair_chart(sales_line, use_container_width=True)
+right.altair_chart(region_bar, use_container_width=True)
 
+# Color-coded table
+if not region_summary.empty:
+    styled = region_summary.style.background_gradient(
+        cmap="RdYlGn",
+        subset=["Sales"],
+        low=0,
+        high=1,
+    )
+    st.markdown("### Region Sales Summary")
+    st.dataframe(styled, height=240)
 
-
-
-
-
-
-
-# =========================
-# SIDEBAR
-# =========================
-menu = st.sidebar.radio("Menu", [
-    "Dashboard",
-    "Products",
-    "Quantity",
-    "Price",
-    "Total Sales",
-    "Date",
-    "Stock",
-    "MACHINE LEARNING Prediction",
-    ])
- 
-
-if st.button("Daily Report"):
-    file = make_pdf("Daily Sales Report", daily_data)
-    st.success("Report created!")
-
-    with open(file, "rb") as f:
-        st.download_button("Download Daily Report", f, file_name=file)
-
-if st.button("Weekly Report"):
-    file = make_pdf("Weekly Sales Report", weekly_data)
-    st.download_button("Download Weekly Report", open(file, "rb"), file_name=file)
-
-if st.button("Monthly Report"):
-    file = make_pdf("Monthly Sales Report", monthly_data)
-    st.download_button("Download Monthly Report", open(file, "rb"), file_name=file)        
-
-# =========================
-
-
-    
-# =========================
-# END
-# =========================
-
-# =========================
-# DASHBOARD
-# =========================
-if menu == "Dashboard":
-
-    st.title("📊 Dashboard")
-
-    col1, col2, col3 = st.columns(3)
-
-    products = cursor.execute("SELECT COUNT(*) FROM products").fetchone()[0]
-    sales = cursor.execute("SELECT SUM(total) FROM sales").fetchone()[0] or 0
-    stock = cursor.execute("SELECT SUM(stock) FROM products").fetchone()[0] or 0
-
-    col1.metric("Products", products)
-    col2.metric("Sales", sales)
-    col3.metric("Stock", stock)
-
-    df = pd.read_sql("SELECT date,total FROM sales", conn)
-
-    if not df.empty:
-        st.subheader("📈 Sales Chart")
-        fig = px.line(df, x="date", y="total", markers=True)
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.subheader("🥧 Sales Distribution")
-        fig2 = px.pie(df, values="total", names="date", hole=0.5)
-        st.plotly_chart(fig2, use_container_width=True)
-
-# =========================
-# PRODUCTS CRUD
-# =========================
-elif menu == "Products":
-
-    st.title("📦 Products CRUD")
-
-    action = st.selectbox("Action", ["Add", "View", "Update", "Delete"])
-
-    if action == "Add":
-        name = st.text_input("Name")
-        price = st.number_input("Price")
-        stock = st.number_input("Stock")
-
-        if st.button("Save"):
-            cursor.execute("INSERT INTO products(name,price,stock) VALUES(?,?,?)",
-                           (name, price, stock))
-            conn.commit()
-            st.success("Added")
-
-    if action == "View":
-        st.dataframe(pd.read_sql("SELECT * FROM products", conn))
-
-    if action == "Update":
-        pid = st.number_input("Product ID")
-        price = st.number_input("New Price")
-
-        if st.button("Update"):
-            cursor.execute("UPDATE products SET price=? WHERE id=?",
-                           (price, pid))
-            conn.commit()
-            st.success("Updated")
-
-    if action == "Delete":
-        pid = st.number_input("Product ID")
-
-        if st.button("Delete"):
-            cursor.execute("DELETE FROM products WHERE id=?",
-                           (pid,))
-            conn.commit()
-            st.success("Deleted")
-
-# =========================
-# SALES
-# =========================
-elif menu == "Sales":
-
-    st.title("💰 Sales System")
-
-    products = pd.read_sql("SELECT * FROM products", conn)
-
-    if not products.empty:
-
-        product = st.selectbox("Product", products["name"])
-        qty = st.number_input("Qty", min_value=1)
-
-        price = products[products["name"] == product]["price"].values[0]
-        total = price * qty
-
-        st.write("Total:", total)
-
-        if st.button("Sell"):
-            date = str(datetime.date.today())
-
-            cursor.execute("INSERT INTO sales(product,qty,total,date) VALUES(?,?,?,?)",
-                           (product, qty, total, date))
-            conn.commit()
-            st.success("Sale Recorded")
-
-# =========================
-# ML PREDICTION
-# =========================
-elif menu == "ML Prediction":
-
-    st.title("🤖 Sales Prediction")
-
-    df = pd.read_sql("SELECT * FROM sales", conn)
-
-    if len(df) > 3:
-
-        df["x"] = np.arange(len(df))
-
-        X = df[["x"]]
-        y = df["total"]
-
-        model = LinearRegression()
-        model.fit(X, y)
-
-        pred = model.predict([[len(df)+1]])[0]
-
-        st.success(f"Next Sales Prediction: {pred:,.0f}")
-
-    else:
-        st.warning("Not enough data")
-
-
-st.markdown("© 2026 Powered by Jafari Tech All Rights Reserved")
-
-# =========================
-
-
-    
-# =========================
-# END
-# =========================
+st.markdown("---")
+st.markdown(
+    "### Dashboard insights"
+    "\n- Green color shows strong sales performance."
+    "\n- Orange indicates stable or moderate performance."
+    "\n- Red highlights region or month declines that need attention."
+)
