@@ -7,3 +7,4 @@ scikit-learn
 reportlab
 plotly
 joblib
+altair as alt
